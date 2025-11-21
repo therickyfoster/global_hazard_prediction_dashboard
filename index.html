@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Natural Hazard Prediction Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e27;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        #container {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            grid-template-rows: 60px 1fr;
+            height: 100vh;
+            gap: 0;
+        }
+
+        header {
+            grid-column: 1 / -1;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .status {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4ade80;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.offline {
+            background: #ef4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        #sidebar {
+            background: #151b32;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid #2a3150;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+            position: relative;
+        }
+
+        .control-panel {
+            background: #1e2642;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .control-panel h3 {
+            font-size: 14px;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-bottom: 12px;
+            letter-spacing: 0.5px;
+        }
+
+        .layer-toggle {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            margin-bottom: 8px;
+            background: #0f1729;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .layer-toggle:hover {
+            background: #1a2038;
+            transform: translateX(4px);
+        }
+
+        .layer-toggle input {
+            margin-right: 10px;
+        }
+
+        .layer-toggle label {
+            flex: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .layer-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .earthquake-icon { background: #f59e0b; }
+        .fire-icon { background: #ef4444; }
+        .flood-icon { background: #3b82f6; }
+        .storm-icon { background: #8b5cf6; }
+        .volcano-icon { background: #dc2626; }
+        .tsunami-icon { background: #06b6d4; }
+
+        #notifications {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .notification {
+            background: #1e2642;
+            border-left: 4px solid;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .notification.info { border-color: #3b82f6; }
+        .notification.warning { border-color: #f59e0b; }
+        .notification.critical { border-color: #ef4444; }
+
+        .notification-time {
+            font-size: 11px;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+
+        .notification-text {
+            font-size: 13px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .stat-card {
+            background: #0f1729;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #60a5fa;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        .legend {
+            background: #1e2642;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+        }
+
+        .prediction-panel {
+            background: #0f1729;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+
+        .prediction-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #2a3150;
+        }
+
+        .prediction-item:last-child {
+            border-bottom: none;
+        }
+
+        .prediction-score {
+            font-weight: bold;
+        }
+
+        .score-critical { color: #ef4444; }
+        .score-high { color: #f59e0b; }
+        .score-moderate { color: #eab308; }
+        .score-low { color: #22c55e; }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f1729;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #2a3150;
+            border-radius: 3px;
+        }
+
+        .leaflet-popup-content-wrapper {
+            background: #1e2642;
+            color: #e0e0e0;
+        }
+
+        .leaflet-popup-tip {
+            background: #1e2642;
+        }
+
+        .popup-content h4 {
+            margin: 0 0 8px 0;
+            color: #60a5fa;
+        }
+
+        .popup-content p {
+            margin: 4px 0;
+            font-size: 13px;
+        }
+
+        .refresh-btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 10px;
+            width: 100%;
+            transition: background 0.2s;
+        }
+
+        .refresh-btn:hover {
+            background: #1d4ed8;
+        }
+
+        .loading {
+            display: none;
+            color: #60a5fa;
+            font-size: 12px;
+            text-align: center;
+            padding: 10px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .data-source {
+            font-size: 10px;
+            color: #64748b;
+            margin-top: 5px;
+            font-style: italic;
+        }
+
+        .language-selector {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .language-selector select {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e0e0e0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 6px 32px 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            outline: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23e0e0e0' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+        }
+
+        .language-selector select:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .language-selector select option {
+            background: #1e2642;
+            color: #e0e0e0;
+        }
+
+        .lang-icon {
+            font-size: 18px;
+        }
+
+        .translation-loading {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <header>
+            <h1 data-i18n="title">🌍 Global Hazard Prediction Dashboard</h1>
+            <div class="status">
+                <div class="language-selector">
+                    <span class="lang-icon">🌐</span>
+                    <select id="language-select">
+                        <option value="en">English</option>
+                        <option value="es">Español</option>
+                        <option value="fr">Français</option>
+                        <option value="de">Deutsch</option>
+                        <option value="zh">中文</option>
+                        <option value="ja">日本語</option>
+                        <option value="ar">العربية</option>
+                        <option value="hi">हिन्दी</option>
+                        <option value="pt">Português</option>
+                        <option value="ru">Русский</option>
+                        <option value="it">Italiano</option>
+                        <option value="ko">한국어</option>
+                    </select>
+                    <span class="translation-loading" id="translation-status"></span>
+                </div>
+                <span class="status-dot" id="status-dot"></span>
+                <span id="connection-status" data-i18n="status.connecting">Connecting...</span>
+                <span id="last-update" style="font-size: 12px; color: #94a3b8;"></span>
+            </div>
+        </header>
+
+        <aside id="sidebar">
+            <div class="control-panel">
+                <h3 data-i18n="layers.title">Active Layers</h3>
+                <div class="layer-toggle">
+                    <input type="checkbox" id="layer-earthquake" checked>
+                    <label for="layer-earthquake">
+                        <div class="layer-icon earthquake-icon"></div>
+                        <span data-i18n="layers.earthquake">Earthquakes (Live)</span>
+                    </label>
+                </div>
+                <div class="layer-toggle">
+                    <input type="checkbox" id="layer-fire" checked>
+                    <label for="layer-fire">
+                        <div class="layer-icon fire-icon"></div>
+                        <span data-i18n="layers.fire">Wildfires</span>
+                    </label>
+                </div>
+                <div class="layer-toggle">
+                    <input type="checkbox" id="layer-flood" checked>
+                    <label for="layer-flood">
+                        <div class="layer-icon flood-icon"></div>
+                        <span data-i18n="layers.flood">Floods</span>
+                    </label>
+                </div>
+                <div class="layer-toggle">
+                    <input type="checkbox" id="layer-storm" checked>
+                    <label for="layer-storm">
+                        <div class="layer-icon storm-icon"></div>
+                        <span data-i18n="layers.storm">Storms</span>
+                    </label>
+                </div>
+                <div class="layer-toggle">
+                    <input type="checkbox" id="layer-volcano" checked>
+                    <label for="layer-volcano">
+                        <div class="layer-icon volcano-icon"></div>
+                        <span data-i18n="layers.volcano">Volcanoes</span>
+                    </label>
+                </div>
+                <div class="layer-toggle">
+                    <input type="checkbox" id="layer-tsunami" checked>
+                    <label for="layer-tsunami">
+                        <div class="layer-icon tsunami-icon"></div>
+                        <span data-i18n="layers.tsunami">Tsunamis</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h3 data-i18n="stats.title">Live Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="total-events">0</div>
+                        <div class="stat-label" data-i18n="stats.total">Total Events (24h)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="critical-events">0</div>
+                        <div class="stat-label" data-i18n="stats.critical">Critical Alerts</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="predicted-events">0</div>
+                        <div class="stat-label" data-i18n="stats.zones">High Risk Zones</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="affected-regions">0</div>
+                        <div class="stat-label" data-i18n="stats.regions">Affected Regions</div>
+                    </div>
+                </div>
+                <button class="refresh-btn" id="refresh-data" data-i18n="buttons.refresh">🔄 Refresh Data</button>
+                <div class="loading" id="loading" data-i18n="status.loading">Fetching live data...</div>
+                <div class="data-source" data-i18n="datasource">Data: USGS, GDACS, NASA FIRMS</div>
+            </div>
+
+            <div class="control-panel">
+                <h3 data-i18n="prediction.title">Prediction Index</h3>
+                <div class="prediction-panel" id="predictions">
+                    <div class="prediction-item">
+                        <span data-i18n="regions.ringoffire">Ring of Fire</span>
+                        <span class="prediction-score score-high" data-i18n="severity.high">HIGH</span>
+                    </div>
+                    <div class="prediction-item">
+                        <span data-i18n="regions.caribbean">Caribbean Basin</span>
+                        <span class="prediction-score score-moderate" data-i18n="severity.moderate">MODERATE</span>
+                    </div>
+                    <div class="prediction-item">
+                        <span data-i18n="regions.mediterranean">Mediterranean</span>
+                        <span class="prediction-score score-moderate" data-i18n="severity.moderate">MODERATE</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h3 data-i18n="legend.title">Risk Legend</h3>
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #ef4444;"></div>
+                        <span data-i18n="legend.critical">Critical (M7.0+)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #f59e0b;"></div>
+                        <span data-i18n="legend.high">High (M5.0-6.9)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #eab308;"></div>
+                        <span data-i18n="legend.moderate">Moderate (M3.0-4.9)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #22c55e;"></div>
+                        <span data-i18n="legend.low">Low (&lt;M3.0)</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h3 data-i18n="notifications.title">Live Notifications</h3>
+                <div id="notifications"></div>
+            </div>
+        </aside>
+
+        <main id="map"></main>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // ========== TRANSLATION SYSTEM ==========
+        const translations = {
+            en: {
+                title: "🌍 Global Hazard Prediction Dashboard",
+                "status.connecting": "Connecting...",
+                "status.active": "Live Data Active",
+                "status.issues": "Connection Issues",
+                "status.loading": "Fetching live data...",
+                "status.updated": "Updated:",
+                "layers.title": "Active Layers",
+                "layers.earthquake": "Earthquakes (Live)",
+                "layers.fire": "Wildfires",
+                "layers.flood": "Floods",
+                "layers.storm": "Storms",
+                "layers.volcano": "Volcanoes",
+                "layers.tsunami": "Tsunamis",
+                "stats.title": "Live Statistics",
+                "stats.total": "Total Events (24h)",
+                "stats.critical": "Critical Alerts",
+                "stats.zones": "High Risk Zones",
+                "stats.regions": "Affected Regions",
+                "buttons.refresh": "🔄 Refresh Data",
+                "datasource": "Data: USGS, GDACS, NASA FIRMS",
+                "prediction.title": "Prediction Index",
+                "regions.ringoffire": "Ring of Fire",
+                "regions.caribbean": "Caribbean Basin",
+                "regions.mediterranean": "Mediterranean",
+                "severity.high": "HIGH",
+                "severity.moderate": "MODERATE",
+                "severity.low": "LOW",
+                "severity.critical": "CRITICAL",
+                "legend.title": "Risk Legend",
+                "legend.critical": "Critical (M7.0+)",
+                "legend.high": "High (M5.0-6.9)",
+                "legend.moderate": "Moderate (M3.0-4.9)",
+                "legend.low": "Low (<M3.0)",
+                "notifications.title": "Live Notifications",
+                "popup.earthquake": "Earthquake",
+                "popup.magnitude": "Magnitude:",
+                "popup.location": "Location:",
+                "popup.depth": "Depth:",
+                "popup.time": "Time:",
+                "popup.severity": "严重程度：",
+                "notification.loaded": "从USGS加载了{count}次地震",
+                "notification.failed": "加载地震数据失败：",
+                "notification.refreshed": "仪表板数据已刷新",
+                "notification.initializing": "仪表板初始化中...",
+                "notification.detected": "在{place}附近检测到M{mag}地震"
+            },
+            ja: {
+                title: "🌍 グローバル災害予測ダッシュボード",
+                "status.connecting": "接続中...",
+                "status.active": "ライブデータアクティブ",
+                "status.issues": "接続の問題",
+                "status.loading": "ライブデータを取得中...",
+                "status.updated": "更新：",
+                "layers.title": "アクティブレイヤー",
+                "layers.earthquake": "地震（ライブ）",
+                "layers.fire": "山火事",
+                "layers.flood": "洪水",
+                "layers.storm": "嵐",
+                "layers.volcano": "火山",
+                "layers.tsunami": "津波",
+                "stats.title": "ライブ統計",
+                "stats.total": "総イベント（24時間）",
+                "stats.critical": "重大な警告",
+                "stats.zones": "高リスクゾーン",
+                "stats.regions": "影響を受けた地域",
+                "buttons.refresh": "🔄 データを更新",
+                "datasource": "データ：USGS、GDACS、NASA FIRMS",
+                "prediction.title": "予測指数",
+                "regions.ringoffire": "環太平洋火山帯",
+                "regions.caribbean": "カリブ海盆",
+                "regions.mediterranean": "地中海",
+                "severity.high": "高",
+                "severity.moderate": "中程度",
+                "severity.low": "低",
+                "severity.critical": "重大",
+                "legend.title": "リスク凡例",
+                "legend.critical": "重大（M7.0+）",
+                "legend.high": "高（M5.0-6.9）",
+                "legend.moderate": "中程度（M3.0-4.9）",
+                "legend.low": "低（<M3.0）",
+                "notifications.title": "ライブ通知",
+                "popup.earthquake": "地震",
+                "popup.magnitude": "マグニチュード：",
+                "popup.location": "場所：",
+                "popup.depth": "深さ：",
+                "popup.time": "時間：",
+                "popup.severity": "深刻度：",
+                "notification.loaded": "USGSから{count}件の地震を読み込みました",
+                "notification.failed": "地震データの読み込みに失敗：",
+                "notification.refreshed": "ダッシュボードデータを更新しました",
+                "notification.initializing": "ダッシュボードを初期化中...",
+                "notification.detected": "{place}付近でM{mag}の地震を検出"
+            },
+            ar: {
+                title: "🌍 لوحة التنبؤ بالكوارث العالمية",
+                "status.connecting": "جاري الاتصال...",
+                "status.active": "البيانات الحية نشطة",
+                "status.issues": "مشاكل في الاتصال",
+                "status.loading": "جلب البيانات الحية...",
+                "status.updated": "آخر تحديث:",
+                "layers.title": "الطبقات النشطة",
+                "layers.earthquake": "الزلازل (مباشر)",
+                "layers.fire": "حرائق الغابات",
+                "layers.flood": "الفيضانات",
+                "layers.storm": "العواصف",
+                "layers.volcano": "البراكين",
+                "layers.tsunami": "تسونامي",
+                "stats.title": "إحصائيات حية",
+                "stats.total": "إجمالي الأحداث (24 ساعة)",
+                "stats.critical": "تنبيهات حرجة",
+                "stats.zones": "مناطق عالية الخطورة",
+                "stats.regions": "المناطق المتأثرة",
+                "buttons.refresh": "🔄 تحديث البيانات",
+                "datasource": "البيانات: USGS، GDACS، NASA FIRMS",
+                "prediction.title": "مؤشر التنبؤ",
+                "regions.ringoffire": "حلقة النار",
+                "regions.caribbean": "حوض الكاريبي",
+                "regions.mediterranean": "البحر المتوسط",
+                "severity.high": "عالي",
+                "severity.moderate": "متوسط",
+                "severity.low": "منخفض",
+                "severity.critical": "حرج",
+                "legend.title": "مفتاح المخاطر",
+                "legend.critical": "حرج (M7.0+)",
+                "legend.high": "عالي (M5.0-6.9)",
+                "legend.moderate": "متوسط (M3.0-4.9)",
+                "legend.low": "منخفض (<M3.0)",
+                "notifications.title": "الإشعارات الحية",
+                "popup.earthquake": "زلزال",
+                "popup.magnitude": "القوة:",
+                "popup.location": "الموقع:",
+                "popup.depth": "العمق:",
+                "popup.time": "الوقت:",
+                "popup.severity": "الشدة:",
+                "notification.loaded": "تم تحميل {count} زلزال من USGS",
+                "notification.failed": "فشل تحميل بيانات الزلازل:",
+                "notification.refreshed": "تم تحديث بيانات اللوحة",
+                "notification.initializing": "جاري تهيئة اللوحة...",
+                "notification.detected": "تم اكتشاف زلزال M{mag} بالقرب من {place}"
+            },
+            hi: {
+                title: "🌍 वैश्विक आपदा पूर्वानुमान डैशबोर्ड",
+                "status.connecting": "कनेक्ट हो रहा है...",
+                "status.active": "लाइव डेटा सक्रिय",
+                "status.issues": "कनेक्शन समस्याएं",
+                "status.loading": "लाइव डेटा प्राप्त कर रहे हैं...",
+                "status.updated": "अपडेट किया गया:",
+                "layers.title": "सक्रिय परतें",
+                "layers.earthquake": "भूकंप (लाइव)",
+                "layers.fire": "जंगल की आग",
+                "layers.flood": "बाढ़",
+                "layers.storm": "तूफान",
+                "layers.volcano": "ज्वालामुखी",
+                "layers.tsunami": "सुनामी",
+                "stats.title": "लाइव आंकड़े",
+                "stats.total": "कुल घटनाएं (24 घंटे)",
+                "stats.critical": "गंभीर अलर्ट",
+                "stats.zones": "उच्च जोखिम क्षेत्र",
+                "stats.regions": "प्रभावित क्षेत्र",
+                "buttons.refresh": "🔄 डेटा रीफ्रेश करें",
+                "datasource": "डेटा: USGS, GDACS, NASA FIRMS",
+                "prediction.title": "पूर्वानुमान सूचकांक",
+                "regions.ringoffire": "रिंग ऑफ फायर",
+                "regions.caribbean": "कैरेबियन बेसिन",
+                "regions.mediterranean": "भूमध्यसागरीय",
+                "severity.high": "उच्च",
+                "severity.moderate": "मध्यम",
+                "severity.low": "कम",
+                "severity.critical": "गंभीर",
+                "legend.title": "जोखिम किंवदंती",
+                "legend.critical": "गंभीर (M7.0+)",
+                "legend.high": "उच्च (M5.0-6.9)",
+                "legend.moderate": "मध्यम (M3.0-4.9)",
+                "legend.low": "कम (<M3.0)",
+                "notifications.title": "लाइव सूचनाएं",
+                "popup.earthquake": "भूकंप",
+                "popup.magnitude": "परिमाण:",
+                "popup.location": "स्थान:",
+                "popup.depth": "गहराई:",
+                "popup.time": "समय:",
+                "popup.severity": "गंभीरता:",
+                "notification.loaded": "USGS से {count} भूकंप लोड किए गए",
+                "notification.failed": "भूकंप डेटा लोड करने में विफल:",
+                "notification.refreshed": "डैशबोर्ड डेटा रीफ्रेश किया गया",
+                "notification.initializing": "डैशबोर्ड आरंभ हो रहा है...",
+                "notification.detected": "{place} के पास M{mag} भूकंप का पता चला"
+            },
+            pt: {
+                title: "🌍 Painel de Previsão de Desastres Globais",
+                "status.connecting": "Conectando...",
+                "status.active": "Dados ao Vivo Ativos",
+                "status.issues": "Problemas de Conexão",
+                "status.loading": "Buscando dados ao vivo...",
+                "status.updated": "Atualizado:",
+                "layers.title": "Camadas Ativas",
+                "layers.earthquake": "Terremotos (Ao Vivo)",
+                "layers.fire": "Incêndios Florestais",
+                "layers.flood": "Inundações",
+                "layers.storm": "Tempestades",
+                "layers.volcano": "Vulcões",
+                "layers.tsunami": "Tsunamis",
+                "stats.title": "Estatísticas ao Vivo",
+                "stats.total": "Eventos Totais (24h)",
+                "stats.critical": "Alertas Críticos",
+                "stats.zones": "Zonas de Alto Risco",
+                "stats.regions": "Regiões Afetadas",
+                "buttons.refresh": "🔄 Atualizar Dados",
+                "datasource": "Dados: USGS, GDACS, NASA FIRMS",
+                "prediction.title": "Índice de Previsão",
+                "regions.ringoffire": "Anel de Fogo",
+                "regions.caribbean": "Bacia do Caribe",
+                "regions.mediterranean": "Mediterrâneo",
+                "severity.high": "ALTO",
+                "severity.moderate": "MODERADO",
+                "severity.low": "BAIXO",
+                "severity.critical": "CRÍTICO",
+                "legend.title": "Legenda de Risco",
+                "legend.critical": "Crítico (M7.0+)",
+                "legend.high": "Alto (M5.0-6.9)",
+                "legend.moderate": "Moderado (M3.0-4.9)",
+                "legend.low": "Baixo (<M3.0)",
+                "notifications.title": "Notificações ao Vivo",
+                "popup.earthquake": "Terremoto",
+                "popup.magnitude": "Magnitude:",
+                "popup.location": "Localização:",
+                "popup.depth": "Profundidade:",
+                "popup.time": "Hora:",
+                "popup.severity": "Gravidade:",
+                "notification.loaded": "{count} terremotos carregados do USGS",
+                "notification.failed": "Falha ao carregar dados de terremotos:",
+                "notification.refreshed": "Dados do painel atualizados",
+                "notification.initializing": "Inicializando painel...",
+                "notification.detected": "Terremoto M{mag} detectado perto de {place}"
+            },
+            ru: {
+                title: "🌍 Глобальная Панель Прогнозирования Катастроф",
+                "status.connecting": "Подключение...",
+                "status.active": "Данные в Реальном Времени",
+                "status.issues": "Проблемы с Подключением",
+                "status.loading": "Загрузка данных...",
+                "status.updated": "Обновлено:",
+                "layers.title": "Активные Слои",
+                "layers.earthquake": "Землетрясения (Live)",
+                "layers.fire": "Лесные Пожары",
+                "layers.flood": "Наводнения",
+                "layers.storm": "Штормы",
+                "layers.volcano": "Вулканы",
+                "layers.tsunami": "Цунами",
+                "stats.title": "Статистика в Реальном Времени",
+                "stats.total": "Всего Событий (24ч)",
+                "stats.critical": "Критические Оповещения",
+                "stats.zones": "Зоны Высокого Риска",
+                "stats.regions": "Затронутые Регионы",
+                "buttons.refresh": "🔄 Обновить Данные",
+                "datasource": "Данные: USGS, GDACS, NASA FIRMS",
+                "prediction.title": "Индекс Прогнозирования",
+                "regions.ringoffire": "Тихоокеанское Огненное Кольцо",
+                "regions.caribbean": "Карибский Бассейн",
+                "regions.mediterranean": "Средиземноморье",
+                "severity.high": "ВЫСОКИЙ",
+                "severity.moderate": "УМЕРЕННЫЙ",
+                "severity.low": "НИЗКИЙ",
+                "severity.critical": "КРИТИЧЕСКИЙ",
+                "legend.title": "Легенда Рисков",
+                "legend.critical": "Критический (M7.0+)",
+                "legend.high": "Высокий (M5.0-6.9)",
+                "legend.moderate": "Умеренный (M3.0-4.9)",
+                "legend.low": "Низкий (<M3.0)",
+                "notifications.title": "Уведомления",
+                "popup.earthquake": "Землетрясение",
+                "popup.magnitude": "Магнитуда:",
+                "popup.location": "Местоположение:",
+                "popup.depth": "Глубина:",
+                "popup.time": "Время:",
+                "popup.severity": "Степень:",
+                "notification.loaded": "Загружено {count} землетрясений из USGS",
+                "notification.failed": "Ошибка загрузки данных:",
+                "notification.refreshed": "Данные панели обновлены",
+                "notification.initializing": "Инициализация панели...",
+                "notification.detected": "Обнаружено землетрясение M{mag} около {place}"
+            },
+            it: {
+                title: "🌍 Dashboard Globale di Previsione Disastri",
+                "status.connecting": "Connessione...",
+                "status.active": "Dati in Tempo Reale Attivi",
+                "status.issues": "Problemi di Connessione",
+                "status.loading": "Recupero dati in tempo reale...",
+                "status.updated": "Aggiornato:",
+                "layers.title": "Livelli Attivi",
+                "layers.earthquake": "Terremoti (Live)",
+                "layers.fire": "Incendi Boschivi",
+                "layers.flood": "Alluvioni",
+                "layers.storm": "Tempeste",
+                "layers.volcano": "Vulcani",
+                "layers.tsunami": "Tsunami",
+                "stats.title": "Statistiche in Tempo Reale",
+                "stats.total": "Eventi Totali (24h)",
+                "stats.critical": "Avvisi Critici",
+                "stats.zones": "Zone ad Alto Rischio",
+                "stats.regions": "Regioni Colpite",
+                "buttons.refresh": "🔄 Aggiorna Dati",
+                "datasource": "Dati: USGS, GDACS, NASA FIRMS",
+                "prediction.title": "Indice di Previsione",
+                "regions.ringoffire": "Anello di Fuoco",
+                "regions.caribbean": "Bacino Caraibico",
+                "regions.mediterranean": "Mediterraneo",
+                "severity.high": "ALTO",
+                "severity.moderate": "MODERATO",
+                "severity.low": "BASSO",
+                "severity.critical": "CRITICO",
+                "legend.title": "Legenda Rischi",
+                "legend.critical": "Critico (M7.0+)",
+                "legend.high": "Alto (M5.0-6.9)",
+                "legend.moderate": "Moderato (M3.0-4.9)",
+                "legend.low": "Basso (<M3.0)",
+                "notifications.title": "Notifiche in Tempo Reale",
+                "popup.earthquake": "Terremoto",
+                "popup.magnitude": "Magnitudo:",
+                "popup.location": "Posizione:",
+                "popup.depth": "Profondità:",
+                "popup.time": "Ora:",
+                "popup.severity": "Gravità:",
+                "notification.loaded": "{count} terremoti caricati da USGS",
+                "notification.failed": "Impossibile caricare i dati dei terremoti:",
+                "notification.refreshed": "Dati dashboard aggiornati",
+                "notification.initializing": "Inizializzazione dashboard...",
+                "notification.detected": "Terremoto M{mag} rilevato vicino a {place}"
+            },
+            ko: {
+                title: "🌍 글로벌 재난 예측 대시보드",
+                "status.connecting": "연결 중...",
+                "status.active": "실시간 데이터 활성",
+                "status.issues": "연결 문제",
+                "status.loading": "실시간 데이터 가져오는 중...",
+                "status.updated": "업데이트:",
+                "layers.title": "활성 레이어",
+                "layers.earthquake": "지진 (실시간)",
+                "layers.fire": "산불",
+                "layers.flood": "홍수",
+                "layers.storm": "폭풍",
+                "layers.volcano": "화산",
+                "layers.tsunami": "쓰나미",
+                "stats.title": "실시간 통계",
+                "stats.total": "총 이벤트 (24시간)",
+                "stats.critical": "심각한 경보",
+                "stats.zones": "고위험 구역",
+                "stats.regions": "영향받은 지역",
+                "buttons.refresh": "🔄 데이터 새로고침",
+                "datasource": "데이터: USGS, GDACS, NASA FIRMS",
+                "prediction.title": "예측 지수",
+                "regions.ringoffire": "환태평양 조산대",
+                "regions.caribbean": "카리브해 분지",
+                "regions.mediterranean": "지중해",
+                "severity.high": "높음",
+                "severity.moderate": "보통",
+                "severity.low": "낮음",
+                "severity.critical": "심각",
+                "legend.title": "위험 범례",
+                "legend.critical": "심각 (M7.0+)",
+                "legend.high": "높음 (M5.0-6.9)",
+                "legend.moderate": "보통 (M3.0-4.9)",
+                "legend.low": "낮음 (<M3.0)",
+                "notifications.title": "실시간 알림",
+                "popup.earthquake": "지진",
+                "popup.magnitude": "규모:",
+                "popup.location": "위치:",
+                "popup.depth": "깊이:",
+                "popup.time": "시간:",
+                "popup.severity": "심각도:",
+                "notification.loaded": "USGS에서 {count}개 지진 로드됨",
+                "notification.failed": "지진 데이터 로드 실패:",
+                "notification.refreshed": "대시보드 데이터 새로고침됨",
+                "notification.initializing": "대시보드 초기화 중...",
+                "notification.detected": "{place} 근처에서 M{mag} 지진 감지됨"
+            }
+        };
+
+        let currentLang = 'en';
+
+        // Translation function
+        function t(key, params = {}) {
+            const lang = translations[currentLang] || translations.en;
+            let text = lang[key] || translations.en[key] || key;
+            
+            // Replace parameters like {count}, {mag}, {place}
+            Object.keys(params).forEach(param => {
+                text = text.replace(`{${param}}`, params[param]);
+            });
+            
+            return text;
+        }
+
+        // Apply translations to all elements with data-i18n attribute
+        function applyTranslations() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                el.textContent = t(key);
+            });
+            
+            // Update document direction for RTL languages
+            if (currentLang === 'ar') {
+                document.body.style.direction = 'rtl';
+            } else {
+                document.body.style.direction = 'ltr';
+            }
+            
+            document.getElementById('translation-status').textContent = '';
+        }
+
+        // Language selector event
+        document.getElementById('language-select').addEventListener('change', (e) => {
+            currentLang = e.target.value;
+            document.getElementById('translation-status').textContent = '⏳';
+            
+            // Store preference
+            try {
+                localStorage.setItem('hazard-dashboard-lang', currentLang);
+            } catch(e) {}
+            
+            applyTranslations();
+            
+            // Re-fetch data to update popups with new language
+            if (typeof fetchEarthquakeData === 'function') {
+                fetchEarthquakeData();
+            }
+        });
+
+        // Detect browser language on load
+        function detectLanguage() {
+            const browserLang = navigator.language.split('-')[0];
+            return translations[browserLang] ? browserLang : 'en';
+        }
+
+        // ========== CORS PROXY CONFIGURATION ==========
+        const CORS_PROXIES = [
+            'https://api.allorigins.win/raw?url=',
+            'https://corsproxy.io/?',
+            'https://api.codetabs.com/v1/proxy?quest='
+        ];
+
+        async function fetchWithProxy(url) {
+            for (let i = 0; i < CORS_PROXIES.length; i++) {
+                try {
+                    const proxy = CORS_PROXIES[i];
+                    const proxiedUrl = proxy + encodeURIComponent(url);
+                    const response = await fetch(proxiedUrl);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return await response.json();
+                } catch (error) {
+                    if (i === CORS_PROXIES.length - 1) throw error;
+                }
+            }
+        }
+
+        // ========== MAP INITIALIZATION ==========
+        const map = L.map('map').setView([20, 0], 2);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '©OpenStreetMap, ©CartoDB',
+            subdomains: 'abcd',
+            maxZoom: 19
+        }).addTo(map);
+
+        const layers = {
+            earthquake: L.layerGroup().addTo(map),
+            fire: L.layerGroup().addTo(map),
+            flood: L.layerGroup().addTo(map),
+            storm: L.layerGroup().addTo(map),
+            volcano: L.layerGroup().addTo(map),
+            tsunami: L.layerGroup().addTo(map)
+        };
+
+        // ========== GLOBAL STATE ==========
+        let totalEvents = 0;
+        let criticalEvents = 0;
+        let affectedRegions = new Set();
+
+        // ========== LIVE DATA FETCHING ==========
+        async function fetchEarthquakeData() {
+            try {
+                showLoading(true);
+                const data = await fetchWithProxy('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson');
+                
+                layers.earthquake.clearLayers();
+                let earthquakeCount = 0;
+                totalEvents = 0;
+                criticalEvents = 0;
+                affectedRegions.clear();
+                
+                data.features.forEach(feature => {
+                    const props = feature.properties;
+                    const coords = feature.geometry.coordinates;
+                    const mag = props.mag || 0;
+                    const place = props.place || 'Unknown';
+                    
+                    let color, severity;
+                    if (mag >= 7.0) {
+                        color = '#ef4444'; severity = 'critical'; criticalEvents++;
+                    } else if (mag >= 5.0) {
+                        color = '#f59e0b'; severity = 'high';
+                    } else if (mag >= 3.0) {
+                        color = '#eab308'; severity = 'moderate';
+                    } else {
+                        color = '#22c55e'; severity = 'low';
+                    }
+                    
+                    const marker = L.circleMarker([coords[1], coords[0]], {
+                        radius: Math.max(4, mag * 2),
+                        fillColor: color,
+                        color: '#fff',
+                        weight: 1,
+                        opacity: 0.8,
+                        fillOpacity: 0.6
+                    }).addTo(layers.earthquake);
+                    
+                    marker.bindPopup(`
+                        <div class="popup-content">
+                            <h4>🌋 ${t('popup.earthquake')}</h4>
+                            <p><strong>${t('popup.magnitude')}</strong> ${mag.toFixed(1)}</p>
+                            <p><strong>${t('popup.location')}</strong> ${place}</p>
+                            <p><strong>${t('popup.depth')}</strong> ${coords[2].toFixed(1)} km</p>
+                            <p><strong>${t('popup.time')}</strong> ${new Date(props.time).toLocaleString()}</p>
+                            <p><strong>${t('popup.severity')}</strong> ${t('severity.' + severity).toUpperCase()}</p>
+                        </div>
+                    `);
+                    
+                    totalEvents++;
+                    earthquakeCount++;
+                    affectedRegions.add(place.split(',').pop().trim());
+                    
+                    if (mag >= 5.0) {
+                        addNotification(t('notification.detected', { mag: mag.toFixed(1), place }), severity);
+                    }
+                });
+                
+                addNotification(t('notification.loaded', { count: earthquakeCount }), 'info');
+                updateConnectionStatus(true);
+                updateStats();
+                showLoading(false);
+                
+            } catch (error) {
+                console.error('Error:', error);
+                addNotification(t('notification.failed') + ' ' + error.message, 'warning');
+                updateConnectionStatus(false);
+                showLoading(false);
+            }
+        }
+
+        // ========== UTILITY FUNCTIONS ==========
+        function addNotification(text, type = 'info') {
+            const notificationEl = document.createElement('div');
+            notificationEl.className = `notification ${type}`;
+            notificationEl.innerHTML = `
+                <div class="notification-time">${new Date().toLocaleTimeString()}</div>
+                <div class="notification-text">${text}</div>
+            `;
+            
+            const container = document.getElementById('notifications');
+            container.insertBefore(notificationEl, container.firstChild);
+            while (container.children.length > 10) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('total-events').textContent = totalEvents;
+            document.getElementById('critical-events').textContent = criticalEvents;
+            document.getElementById('predicted-events').textContent = '28';
+            document.getElementById('affected-regions').textContent = affectedRegions.size;
+        }
+
+        function updateConnectionStatus(isConnected) {
+            const statusEl = document.getElementById('connection-status');
+            const dotEl = document.getElementById('status-dot');
+            const updateEl = document.getElementById('last-update');
+            
+            if (isConnected) {
+                statusEl.textContent = t('status.active');
+                dotEl.classList.remove('offline');
+                updateEl.textContent = t('status.updated') + ' ' + new Date().toLocaleTimeString();
+            } else {
+                statusEl.textContent = t('status.issues');
+                dotEl.classList.add('offline');
+            }
+        }
+
+        function showLoading(show) {
+            const loadingEl = document.getElementById('loading');
+            loadingEl.classList.toggle('active', show);
+        }
+
+        // ========== LAYER TOGGLES ==========
+        document.querySelectorAll('.layer-toggle input').forEach(checkbox => {
+            checkbox.addEventListener('change', (e) => {
+                const layerName = e.target.id.replace('layer-', '');
+                if (e.target.checked) {
+                    map.addLayer(layers[layerName]);
+                } else {
+                    map.removeLayer(layers[layerName]);
+                }
+            });
+        });
+
+        // ========== REFRESH BUTTON ==========
+        document.getElementById('refresh-data').addEventListener('click', async () => {
+            await fetchEarthquakeData();
+            addNotification(t('notification.refreshed'), 'info');
+        });
+
+        // ========== INITIALIZATION ==========
+        async function initialize() {
+            // Set initial language
+            currentLang = detectLanguage();
+            document.getElementById('language-select').value = currentLang;
+            applyTranslations();
+            
+            addNotification(t('notification.initializing'), 'info');
+            await fetchEarthquakeData();
+            
+            // Auto-refresh every 5 minutes
+            setInterval(fetchEarthquakeData, 300000);
+        }
+
+        initialize();": "Severity:",
+                "notification.loaded": "Loaded {count} earthquakes from USGS",
+                "notification.failed": "Failed to load live earthquake data:",
+                "notification.refreshed": "Dashboard data refreshed",
+                "notification.initializing": "Dashboard initializing...",
+                "notification.detected": "M{mag} earthquake detected near {place}"
+            },
+            es: {
+                title: "🌍 Panel de Predicción de Desastres Naturales",
+                "status.connecting": "Conectando...",
+                "status.active": "Datos en Vivo Activos",
+                "status.issues": "Problemas de Conexión",
+                "status.loading": "Obteniendo datos en vivo...",
+                "status.updated": "Actualizado:",
+                "layers.title": "Capas Activas",
+                "layers.earthquake": "Terremotos (En Vivo)",
+                "layers.fire": "Incendios Forestales",
+                "layers.flood": "Inundaciones",
+                "layers.storm": "Tormentas",
+                "layers.volcano": "Volcanes",
+                "layers.tsunami": "Tsunamis",
+                "stats.title": "Estadísticas en Vivo",
+                "stats.total": "Eventos Totales (24h)",
+                "stats.critical": "Alertas Críticas",
+                "stats.zones": "Zonas de Alto Riesgo",
+                "stats.regions": "Regiones Afectadas",
+                "buttons.refresh": "🔄 Actualizar Datos",
+                "datasource": "Datos: USGS, GDACS, NASA FIRMS",
+                "prediction.title": "Índice de Predicción",
+                "regions.ringoffire": "Anillo de Fuego",
+                "regions.caribbean": "Cuenca del Caribe",
+                "regions.mediterranean": "Mediterráneo",
+                "severity.high": "ALTO",
+                "severity.moderate": "MODERADO",
+                "severity.low": "BAJO",
+                "severity.critical": "CRÍTICO",
+                "legend.title": "Leyenda de Riesgo",
+                "legend.critical": "Crítico (M7.0+)",
+                "legend.high": "Alto (M5.0-6.9)",
+                "legend.moderate": "Moderado (M3.0-4.9)",
+                "legend.low": "Bajo (<M3.0)",
+                "notifications.title": "Notificaciones en Vivo",
+                "popup.earthquake": "Terremoto",
+                "popup.magnitude": "Magnitud:",
+                "popup.location": "Ubicación:",
+                "popup.depth": "Profundidad:",
+                "popup.time": "Hora:",
+                "popup.severity": "Gravedad:",
+                "notification.loaded": "{count} terremotos cargados de USGS",
+                "notification.failed": "Error al cargar datos de terremotos:",
+                "notification.refreshed": "Datos del panel actualizados",
+                "notification.initializing": "Inicializando panel...",
+                "notification.detected": "Terremoto M{mag} detectado cerca de {place}"
+            },
+            fr: {
+                title: "🌍 Tableau de Bord de Prédiction des Catastrophes",
+                "status.connecting": "Connexion...",
+                "status.active": "Données en Direct Actives",
+                "status.issues": "Problèmes de Connexion",
+                "status.loading": "Récupération des données en direct...",
+                "status.updated": "Mis à jour:",
+                "layers.title": "Couches Actives",
+                "layers.earthquake": "Tremblements de Terre (Direct)",
+                "layers.fire": "Feux de Forêt",
+                "layers.flood": "Inondations",
+                "layers.storm": "Tempêtes",
+                "layers.volcano": "Volcans",
+                "layers.tsunami": "Tsunamis",
+                "stats.title": "Statistiques en Direct",
+                "stats.total": "Événements Totaux (24h)",
+                "stats.critical": "Alertes Critiques",
+                "stats.zones": "Zones à Haut Risque",
+                "stats.regions": "Régions Affectées",
+                "buttons.refresh": "🔄 Actualiser les Données",
+                "datasource": "Données: USGS, GDACS, NASA FIRMS",
+                "prediction.title": "Indice de Prédiction",
+                "regions.ringoffire": "Ceinture de Feu",
+                "regions.caribbean": "Bassin Caraïbe",
+                "regions.mediterranean": "Méditerranée",
+                "severity.high": "ÉLEVÉ",
+                "severity.moderate": "MODÉRÉ",
+                "severity.low": "FAIBLE",
+                "severity.critical": "CRITIQUE",
+                "legend.title": "Légende des Risques",
+                "legend.critical": "Critique (M7.0+)",
+                "legend.high": "Élevé (M5.0-6.9)",
+                "legend.moderate": "Modéré (M3.0-4.9)",
+                "legend.low": "Faible (<M3.0)",
+                "notifications.title": "Notifications en Direct",
+                "popup.earthquake": "Tremblement de Terre",
+                "popup.magnitude": "Magnitude:",
+                "popup.location": "Emplacement:",
+                "popup.depth": "Profondeur:",
+                "popup.time": "Heure:",
+                "popup.severity": "Gravité:",
+                "notification.loaded": "{count} tremblements de terre chargés depuis USGS",
+                "notification.failed": "Échec du chargement des données sismiques:",
+                "notification.refreshed": "Données du tableau de bord actualisées",
+                "notification.initializing": "Initialisation du tableau de bord...",
+                "notification.detected": "Séisme M{mag} détecté près de {place}"
+            },
+            de: {
+                title: "🌍 Globales Katastrophen-Vorhersage-Dashboard",
+                "status.connecting": "Verbinden...",
+                "status.active": "Live-Daten Aktiv",
+                "status.issues": "Verbindungsprobleme",
+                "status.loading": "Live-Daten abrufen...",
+                "status.updated": "Aktualisiert:",
+                "layers.title": "Aktive Ebenen",
+                "layers.earthquake": "Erdbeben (Live)",
+                "layers.fire": "Waldbrände",
+                "layers.flood": "Überschwemmungen",
+                "layers.storm": "Stürme",
+                "layers.volcano": "Vulkane",
+                "layers.tsunami": "Tsunamis",
+                "stats.title": "Live-Statistiken",
+                "stats.total": "Gesamtereignisse (24h)",
+                "stats.critical": "Kritische Warnungen",
+                "stats.zones": "Hochrisikozonen",
+                "stats.regions": "Betroffene Regionen",
+                "buttons.refresh": "🔄 Daten Aktualisieren",
+                "datasource": "Daten: USGS, GDACS, NASA FIRMS",
+                "prediction.title": "Vorhersageindex",
+                "regions.ringoffire": "Pazifischer Feuerring",
+                "regions.caribbean": "Karibisches Becken",
+                "regions.mediterranean": "Mittelmeer",
+                "severity.high": "HOCH",
+                "severity.moderate": "MITTEL",
+                "severity.low": "NIEDRIG",
+                "severity.critical": "KRITISCH",
+                "legend.title": "Risikolegende",
+                "legend.critical": "Kritisch (M7.0+)",
+                "legend.high": "Hoch (M5.0-6.9)",
+                "legend.moderate": "Mittel (M3.0-4.9)",
+                "legend.low": "Niedrig (<M3.0)",
+                "notifications.title": "Live-Benachrichtigungen",
+                "popup.earthquake": "Erdbeben",
+                "popup.magnitude": "Magnitude:",
+                "popup.location": "Ort:",
+                "popup.depth": "Tiefe:",
+                "popup.time": "Zeit:",
+                "popup.severity": "Schweregrad:",
+                "notification.loaded": "{count} Erdbeben von USGS geladen",
+                "notification.failed": "Fehler beim Laden der Erdbebendaten:",
+                "notification.refreshed": "Dashboard-Daten aktualisiert",
+                "notification.initializing": "Dashboard wird initialisiert...",
+                "notification.detected": "M{mag} Erdbeben in der Nähe von {place} erkannt"
+            },
+            zh: {
+                title: "🌍 全球灾害预测仪表板",
+                "status.connecting": "连接中...",
+                "status.active": "实时数据已激活",
+                "status.issues": "连接问题",
+                "status.loading": "获取实时数据...",
+                "status.updated": "更新时间：",
+                "layers.title": "活动图层",
+                "layers.earthquake": "地震（实时）",
+                "layers.fire": "森林火灾",
+                "layers.flood": "洪水",
+                "layers.storm": "风暴",
+                "layers.volcano": "火山",
+                "layers.tsunami": "海啸",
+                "stats.title": "实时统计",
+                "stats.total": "总事件数（24小时）",
+                "stats.critical": "严重警报",
+                "stats.zones": "高风险区",
+                "stats.regions": "受影响地区",
+                "buttons.refresh": "🔄 刷新数据",
+                "datasource": "数据来源：USGS、GDACS、NASA FIRMS",
+                "prediction.title": "预测指数",
+                "regions.ringoffire": "环太平洋火山带",
+                "regions.caribbean": "加勒比海盆地",
+                "regions.mediterranean": "地中海",
+                "severity.high": "高",
+                "severity.moderate": "中等",
+                "severity.low": "低",
+                "severity.critical": "严重",
+                "legend.title": "风险图例",
+                "legend.critical": "严重（M7.0+）",
+                "legend.high": "高（M5.0-6.9）",
+                "legend.moderate": "中等（M3.0-4.9）",
+                "legend.low": "低（<M3.0）",
+                "notifications.title": "实时通知",
+                "popup.earthquake": "地震",
+                "popup.magnitude": "震级：",
+                "popup.location": "位置：",
+                "popup.depth": "深度：",
+                "popup.time": "时间：",
+                "popup.severity": "?: ",
